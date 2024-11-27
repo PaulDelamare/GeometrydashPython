@@ -3,105 +3,88 @@ import neat
 from pygame.locals import *
 from game import *  # Assurez-vous que tu as toutes les fonctions nécessaires
 
-class PlayerAI(pygame.sprite.Sprite):
+class PlayerAI(Player):
     def __init__(self, genome, config, level, obstacles):
-        """
-        Initialise l'IA avec le génome et la configuration NEAT.
-        """
-        super().__init__()
+        super().__init__()  # Appel du constructeur de Player pour conserver le comportement de base
         self.genome = genome
-        self.config = config
-        self.net = neat.nn.FeedForwardNetwork.create(self.genome, self.config)
-        
-        # On crée le sprite du joueur AI avec l'image que tu utilises
-        self.image = pygame.Surface((30, 30))  # Remplacer par une texture réelle si tu as une image
-        self.image.fill((255, 0, 0))  # Utilise une couleur ou une texture ici
-        self.rect = self.image.get_rect()
-        self.rect.x = 100  # Position initiale X
-        self.rect.y = 300  # Position initiale Y
-        self.velocity = 0  # Vitesse verticale
-        
-        # Niveau et obstacles pour prendre en compte les interactions
+        self.config = config  # Enregistre la configuration NEAT ici
+        self.net = neat.nn.FeedForwardNetwork.create(genome, config)  # Utilisation de config pour créer le réseau
         self.level = level
         self.obstacles = obstacles
+        self.fitness = 0  # Initialisation de la fitness
+        self.best_fitness = -float('inf')  # Aucune fitness au départ
+        self.last_fitness = 0  # Initialisation de la fitness précédente
+        self.running = True
 
-    def get_inputs(self):
-        """
-        Récupère les entrées du réseau neuronal : position, vitesse, obstacles.
-        """
-        player_x, player_y = self.rect.x, self.rect.y
-        velocity = self.velocity
+    def die(self):
+        """Réinitialise l'IA en cas de mort"""
+        super().die()  # Appelle la méthode de réinitialisation du joueur
+        self.running = False
         
-        # Distance au prochain obstacle
-        distance_to_obstacle = self.get_distance_to_next_obstacle(self.obstacles)
-        
-        # Hauteur du prochain obstacle
-        obstacle_height = self.get_obstacle_height(self.obstacles)
-        
-        # Retourne les 5 entrées
-        return [
-            player_x / 500,  # Normalisation de la position X
-            player_y / 500,  # Normalisation de la position Y
-            velocity / 10,  # Normalisation de la vitesse verticale
-            distance_to_obstacle / 500,  # Normalisation de la distance à l'obstacle
-            obstacle_height / 500  # Normalisation de la hauteur de l'obstacle
-        ]
-        
-    def get_distance_to_next_obstacle(self, obstacles):
-        """
-        Calcule la distance à l'obstacle le plus proche à droite.
-        """
-        closest_distance = float('inf')
-        for obstacle in obstacles:
-            distance = self.rect.x - obstacle.rect.x
-            if distance > 0 and distance < closest_distance:
-                closest_distance = distance
-        return closest_distance if closest_distance != float('inf') else 0
+        # Réinitialisation du réseau neuronal avec la configuration correcte
+        self.net = neat.nn.FeedForwardNetwork.create(self.genome, self.config)  # Utilise self.config ici
 
-    def get_obstacle_height(self, obstacles):
-        """
-        Retourne la hauteur de l'obstacle le plus proche.
-        """
-        closest_height = 0
-        for obstacle in obstacles:
-            distance = self.rect.x - obstacle.rect.x
-            if distance > 0 and distance < 500:
-                closest_height = max(closest_height, obstacle.rect.height)
-        return closest_height
+    def updateAI(self):
+        """Mise à jour spécifique à l'IA sans interférer avec les contrôles du joueur"""
+        # Appel à la méthode update() de Player pour gérer les mouvements standards
+        super().update(self.obstacles)
 
-    def update(self):
-        """
-        Met à jour l'état du joueur AI : décisions basées sur le réseau neuronal.
-        """
-        # Récupère les entrées pour le réseau neuronal
+        # Obtenir les entrées pour le réseau neuronal
         inputs = self.get_inputs()
-        
-        # Passe les entrées dans le réseau pour obtenir les sorties
-        outputs = self.net.activate(inputs)
+        output = self.net.activate(inputs)
 
-        # Si la sortie 0 du réseau est plus grande que 0.5, on saute
-        if outputs[0] > 0.5:  # Si l'IA décide de sauter
+        # Si la sortie du réseau est > 0.5, l'IA décide de sauter
+        if output[0] > 0.2:
             self.jump()
+            
+    def get_inputs(self):
+        """Préparer les entrées pour le réseau neuronal de l'IA"""
+        closest_obstacle = self.get_closest_obstacle()  # Trouver l'obstacle le plus proche
+        if closest_obstacle:
+            # Calculer les entrées normalisées
+            horizontal_distance = (closest_obstacle.rect.x - self.rect.x) / 800
+            vertical_distance = (closest_obstacle.rect.y - self.rect.y) / 600
+            vertical_speed = self.vel_y / 10.0
+            horizontal_speed = self.vel_x / 10.0  # Ajout de la vitesse horizontale pour plus de contexte
 
-        # Met à jour la position du joueur AI (intégration de la gravité et des obstacles)
-        self.velocity += 1  # Applique la gravité
-        self.rect.y += self.velocity
+            # print(horizontal_distance, vertical_distance, vertical_speed, horizontal_speed)
+            # Retourner les entrées
+            inputs = [horizontal_distance, vertical_distance, vertical_speed, horizontal_speed]
+        else:
+            # Si aucun obstacle n'est trouvé, utilise des valeurs par défaut
+            inputs = [1, 1, self.vel_y / 10.0, self.vel_x / 10.0]
         
-        # Limite la position du joueur AI
-        if self.rect.y > 500:  # Si le joueur AI touche le sol
-            self.rect.y = 500
-            self.velocity = 0
+        return inputs
 
-        # Vérifie la collision avec les obstacles
-        self.handle_collision()
-
-    def jump(self):
-        """Simule un saut de l'IA."""
-        self.velocity = -10  # On applique une vitesse négative pour faire sauter l'IA
-
-    def handle_collision(self):
-        """Gère les collisions avec les obstacles."""
+    def get_closest_obstacle(self):
+        """Retourne l'obstacle le plus proche du joueur"""
+        closest_obstacle = None
         for obstacle in self.obstacles:
-            if self.rect.colliderect(obstacle.rect):  # Si le joueur AI touche un obstacle
-                self.rect.x -= 10  # Reculer légèrement pour simuler une collision
-                break  # Terminer la boucle après avoir traité la collision
+            if obstacle.rect.x > self.rect.x:
+                closest_obstacle = obstacle
+                break
+        return closest_obstacle
+
+    def play_game(self):
+        """Lance une partie et retourne la fitness à la fin de la partie"""
+        fitness = 0
+        last_fitness = self.last_fitness  # Garde la dernière fitness
+
+        while not self.is_game_over():
+            self.updateAI()  # Met à jour l'IA
+            fitness = self.get_fitness()  # Récupère la fitness actuelle
+
+            # Si la fitness actuelle est plus faible que la dernière, passe au génome suivant
+            if fitness < last_fitness:
+                print(f"Fitness est plus faible. Passer au génome suivant... (ancien fitness: {last_fitness}, nouveau fitness: {fitness})")
+                break  # Arrêter le jeu et passer au génome suivant
+
+            self.last_fitness = fitness  # Met à jour la fitness pour la comparaison suivante
+
+        return fitness  # Retourner la fitness après la fin du jeu
+
+    def get_fitness(self):
+        """Calculer et retourner la fitness actuelle"""
+        # La logique ici dépend de la façon dont tu calcules la fitness dans ton jeu
+        # Par exemple, tu pourrais baser la fitness sur le temps de survie, le score, etc.
+        return self.level.get_score()  # Exemple de récupération du score comme fitness

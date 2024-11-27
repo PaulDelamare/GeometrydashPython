@@ -36,63 +36,89 @@ camera = pygame.Rect(0, 0, config.WIDTH, config.HEIGHT)  # Utiliser config.WIDTH
 # Boucle de jeu
 clock = pygame.time.Clock()
 
-
 def eval_genomes(genomes, config):
-    """Fonction de fitness pour évaluer les IA."""
+    """Évaluation des génomes."""
     for genome_id, genome in genomes:
+        print(f"Évaluation du génome {genome_id}")  # Afficher l'ID du génome actuel
+        
+        # Créer un réseau neuronal pour ce génome
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         genome.fitness = 0  # Initialiser la fitness à 0
-        player = Player()  # Créer un joueur
-        running = True
-        obstacles = generate_obstacles(level)  # Générer les obstacles
-        
-        while running:
-            screen.blit(bg_image, (0, 0))  # Dessiner le fond
 
-            # Trouver le prochain obstacle
-            closest_obstacle = None
-            for obstacle in obstacles:
-                if obstacle.rect.x > player.rect.x:  # Obstacle devant le joueur
-                    closest_obstacle = obstacle
+        # Effacer tous les anciens joueurs du groupe de sprites
+        all_sprites.empty()  # Vide le groupe de sprites
+
+        # Créer un nouveau joueur AI pour ce génome
+        player_ai = PlayerAI(genome, config, level, obstacles)  # Passer les bons arguments pour PlayerAI
+        all_sprites.add(player_ai)  # Ajouter le nouveau joueur AI au groupe de sprites
+        
+        last_fitness = genome.fitness  # Suivi de la dernière fitness
+        all_sprites.add(*obstacles)  # Ajouter les obstacles au groupe de sprites
+
+        # Boucle de jeu pour cet individu
+        while player_ai.running:  # Tant que player_ai.running est True, la boucle continue
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    print('Fermeture de la fenêtre détectée.')
+                    player_ai.running = False  # Fermer proprement la boucle si l'utilisateur ferme la fenêtre
                     break
 
+            # Dessiner le fond
+            screen.blit(bg_image, (0, 0))
+
             # Préparer les entrées pour le réseau neuronal
-            if closest_obstacle:
-                inputs = [
-                    (closest_obstacle.rect.x - player.rect.x) / config.WIDTH,  # Distance x normalisée
-                    (closest_obstacle.rect.y - player.rect.y) / config.HEIGHT,  # Distance y normalisée
-                    player.vel_y / 10.0,  # Vitesse verticale normalisée
-                ]
-            else:
-                inputs = [1, 1, player.vel_y / 10.0]
-
-            # Obtenir la sortie du réseau
+            inputs = player_ai.get_inputs()
             output = net.activate(inputs)
-            if output[0] > 0.5:  # Si la sortie est > 0.5, le joueur saute
-                player.jump()
 
-            # Mettre à jour le joueur
-            player.update(obstacles)
-            if player.rect.y > config.HEIGHT or player.rect.x < 0:
-                running = False  # Fin de la simulation si le joueur meurt
+            # Si la sortie est > 0.5, le joueur saute
+            if output[0] > 0.5:
+                player_ai.jump()
 
-            # Afficher les sprites
+            # Mettre à jour l'IA du joueur
+            player_ai.updateAI()
+
+            # Vérification si le joueur meurt (appel à die)
+            if player_ai.rect.y > 600 or player_ai.rect.x < 0:
+                # Le joueur est mort, donc on met à jour la fitness et on arrête l'évaluation
+                genome.fitness += 0.1  # Ajouter une récompense pour avoir survécu un peu
+                print(f"Génome {genome_id} mort, fitness finale : {genome.fitness}")
+                
+                # Appeler la méthode die pour mettre running à False
+                player_ai.die()  # La méthode die() met running à False
+                break  # Fin de l'évaluation de ce génome
+
+            # Augmenter la fitness pendant que le joueur est en vie
+            genome.fitness += 0.1  # Plus le joueur reste en vie longtemps, plus la fitness augmente
+
+            # Vérifier si la fitness a diminué, si c'est le cas, on passe au génome suivant
+            if genome.fitness < last_fitness:
+                print(f"Fitness a diminué pour le génome {genome_id}, passage au génome suivant.")
+                break  # Sortir de la boucle pour ce génome
+
+            # Mettre à jour la dernière fitness
+            last_fitness = genome.fitness
+
+            # Mise à jour de la caméra et affichage des éléments
+            camera.centerx = player_ai.rect.centerx
+            camera.x = max(0, camera.x)
+            camera.x = min(camera.x, level_width - 800)
+
             for sprite in all_sprites:
                 screen.blit(sprite.image, sprite.rect.move(-camera.x, -camera.y))
-            pygame.display.flip()
-            clock.tick(60)
 
-            # Incrémenter la fitness en fonction de la distance parcourue
-            genome.fitness += 0.1
+            pygame.display.flip()  # Mettre à jour l'affichage
+            clock.tick(60)  # Limiter les FPS
 
+        # Fin de l'évaluation pour ce génome. L'IA passe au génome suivant dans la boucle.
+        print(f"Évaluation terminée pour le génome {genome_id} avec fitness: {genome.fitness}")
 
 def neat_mode():
     """Lancer le mode IA."""
     # Charger le fichier de configuration NEAT
     local_dir = os.path.dirname(__file__)
-    config_path = os.path.join(local_dir, "neat-config.txt")
-    # print(neat.DefaultSpeciesSet.compatibility_disjoint_coefficient)
-    
+    config_path = os.path.join(local_dir, "neat-config.ini")
+
+    # Créer la configuration NEAT
     config = neat.config.Config(
         neat.DefaultGenome,
         neat.DefaultReproduction,
@@ -101,7 +127,6 @@ def neat_mode():
         config_path,
     )
     
-
     # Créer une population NEAT
     population = neat.Population(config)
     population.add_reporter(neat.StdOutReporter(True))
@@ -109,11 +134,10 @@ def neat_mode():
     population.add_reporter(stats)
 
     # Lancer l'évolution
-    winner = population.run(eval_genomes, 50)  # 50 générations
+    winner = population.run(eval_genomes, 50)  # Réduit le nombre de générations pour les tests
 
     # Afficher le gagnant
     print("\nMeilleur génome :\n{!s}".format(winner))
-
 
 def manual_mode():
     """Lancer le mode manuel."""
@@ -136,7 +160,7 @@ def manual_mode():
         # Mettre à jour la caméra pour suivre le joueur
         camera.centerx = player.rect.centerx
         camera.x = max(0, camera.x)
-        camera.x = min(camera.x, level_width - config.WIDTH)
+        camera.x = min(camera.x, level_width - 800)
 
         # Dessiner le fond
         screen.blit(bg_image, (0, 0))
@@ -178,5 +202,5 @@ def main_menu():
 
 
 if __name__ == "__main__":
-    main_menu()
-    pygame.quit()
+    main_menu()  # Afficher le menu principal
+    pygame.quit()  # Quitter Pygame
