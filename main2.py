@@ -9,7 +9,7 @@ import pickle
 # Constants
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-FPS = 600
+FPS = 60
 GENERATION = 0
 TILE_SIZE = 40  # Taille de chaque case en pixels
 
@@ -291,6 +291,7 @@ class Game:
         # Charger le niveau et générer les obstacles à partir du CSV
         self.level = load_level("level_2.csv")
         self.obstacles = generate_obstacles(self.level)
+        self.isWin = False
 
         # Créer un groupe de sprites
         self.all_sprites = pygame.sprite.Group()
@@ -333,6 +334,9 @@ class Game:
         # Mettre à jour le score
         self.score += 1
 
+    def is_win(self):
+         return self.isWin
+    
     # Vérifie les colisions
     def check_collisions(self):
         """Vérifie les collisions avec les obstacles (spikes et blocs)."""
@@ -355,6 +359,10 @@ class Game:
                             # Le joueur est sur le côté du bloc
                             self.is_running = False  # Le joueur meurt, on arrête le jeu
                             return
+            elif isinstance(obstacle, End):
+                if self.player.rect.colliderect(obstacle.rect):
+                    self.isWin = True
+                # self.is_running = False
     
     #  Dessine le jeu
     def draw(self, screen):
@@ -429,7 +437,29 @@ def generate_obstacles(level):
                 obstacles.append(Obstacle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE, block_image))
             elif cell.lower() == 'spike':  # Spike
                 obstacles.append(Spike(x * TILE_SIZE, y * TILE_SIZE))  # Ajoute un obstacle de type spike
+            elif cell.lower() == 'end':  # Goal
+                obstacles.append(End(x * TILE_SIZE, y * TILE_SIZE))
     return obstacles
+
+class End(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        # Définir les dimensions de l'objet "End"
+        self.width = TILE_SIZE
+        self.height = TILE_SIZE
+
+        # Créer une image (un carré rouge)
+        self.image = pygame.Surface((self.width, self.height))
+        self.image.fill((255, 0, 0))  # Remplit le carré avec une couleur rouge (RGB)
+
+        # Définir le rectangle englobant pour le positionnement
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)
+        
+    def move(self):
+        self.rect.x -= 8
+
+
 
 # Charge le niveau
 level = load_level('level_2.csv')
@@ -543,6 +573,10 @@ def eval_genomes(genomes, config):
                 genome.fitness += game.get_reward()  # Augmenter la fitness
             else:
                 running = False
+            
+            if game.is_win():
+                genome.fitness = 10000000000000
+                running = False
 
             # Mise à jour du meilleur fitness global
             if genome.fitness > max_fitness_global:
@@ -615,4 +649,4 @@ if __name__ == "__main__":
     
 
     # Lancer l'entraînement des génomes
-    p.run(eval_genomes, 1000)  # 50 générations d'entraînement
+    p.run(eval_genomes, 100000)  # 50 générations d'entraînement
