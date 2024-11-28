@@ -455,9 +455,13 @@ else:
 # Défini la génération
 GENERATION = generation
 
+
+# Initialisation de previous_fitness avant l'appel à la fonction
+previous_fitness = 0
+
 # Fonction d'évaluation des génomes
 def eval_genomes(genomes, config):
-    global GENERATION, max_fitness_global
+    global GENERATION, max_fitness_global, previous_fitness
     GENERATION += 1  # Incrémenter la génération
 
     # Compteur d'individus
@@ -471,6 +475,10 @@ def eval_genomes(genomes, config):
     # Liste pour les réseaux et les jeux, réinitialisée pour chaque génération
     nets = []
     games = []
+
+    # Variable pour stocker le meilleur fitness de la génération en cours
+    max_fitness_generation = -float('inf')  # Initialisé à une très faible valeur
+
     print()
     # Afficher des informations au début de chaque génération
     print(f"            ************ DEBUT DE LA GENERATION {GENERATION} ************")
@@ -480,7 +488,7 @@ def eval_genomes(genomes, config):
     if p.best_genome is None:
         print(f"[Début de la génération {GENERATION}] Aucun meilleur génome précédent trouvé. Initialisation.")
     else:
-        print(f"[Début de la génération {GENERATION}] Meilleur génome précédent - Fitness = {p.best_genome.fitness}")
+        print(f"[Début de la génération {GENERATION}] Meilleur génome précédent - Fitness = {max_fitness_global}")
 
     # Créer les réseaux et initialiser les jeux pour chaque génome
     for genome_id, genome in genomes:
@@ -499,7 +507,6 @@ def eval_genomes(genomes, config):
         print(f"[Generation {GENERATION}] Aucun meilleur génome précédent.")
     else:
         best_genome = p.best_genome  # Charger le meilleur génome existant
-        print(f"[Generation {GENERATION}] Meilleur génome précédent : Fitness = {p.best_genome.fitness}")
 
     # Boucle principale pour évaluer chaque génome
     for idx, (genome_id, genome) in enumerate(genomes):
@@ -541,6 +548,10 @@ def eval_genomes(genomes, config):
             if genome.fitness > max_fitness_global:
                 max_fitness_global = genome.fitness
 
+            # Mise à jour du meilleur fitness pour la génération en cours
+            if genome.fitness > max_fitness_generation:
+                max_fitness_generation = genome.fitness
+
             # Mettre à jour le meilleur génome de la génération
             if best_genome is None or genome.fitness > best_genome.fitness:
                 best_genome = genome
@@ -559,18 +570,22 @@ def eval_genomes(genomes, config):
 
             fitness_max_text = font.render(f"Fitness max global: {max_fitness_global}", True, (255, 255, 255))
             screen.blit(fitness_max_text, (10, 90))
-            
-            # Si c'est le premier individu de la génération, assignez le best_genome
-            if individu == 1 and best_genome is not None:
-                genome = best_genome  # Forcer le premier individu à être le meilleur génome
+
+            # Afficher le meilleur fitness de la génération
+            fitness_generation_text = font.render(f"Fitness max génération {GENERATION}: {max_fitness_generation}", True, (255, 255, 255))
+            screen.blit(fitness_generation_text, (10, 130))
 
             pygame.display.flip()
             clock.tick(FPS)
 
+        # Mettez à jour la variable précédente pour la prochaine génération
+        previous_fitness = max_fitness_generation
+
     # Assigner le meilleur génome trouvé dans la génération à p.best_genome
     p.best_genome = best_genome
     print(f"[Fin de la génération {GENERATION}] Meilleur génome : Fitness = {best_genome.fitness}")
-    
+    print(f"[Fin de la génération {GENERATION}] Meilleur fitness de la génération {max_fitness_generation}")
+
     # Sauvegarder la progression à la fin de la génération
     save_progress(p, GENERATION, max_fitness_global)
 
@@ -578,6 +593,8 @@ def eval_genomes(genomes, config):
     print(f"[Generation {GENERATION}] Meilleur génome après évaluation : Fitness = {best_genome.fitness}")
 
     pygame.quit()
+
+
 
 
 
