@@ -22,4 +22,16 @@ cd GeometrydashPython
 ```
 
 - Changer de branch
-- 
+```bash
+git checkout final
+```
+
+- Installer les dépendances : 
+```bash
+pip install neat-python pygame
+```
+
+- Executer le projet :
+```bash
+python main2.py
+```

@@ -2,10 +2,8 @@ import pygame
 import neat
 import os
 import sys
-import random
 import csv
 import pickle
-import glob
 
 
 # Constants
@@ -25,7 +23,7 @@ pygame.init()
 
 # Définir la taille de la fenêtre
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))  # Utiliser config.WIDTH et config.HEIGHT
-pygame.display.set_caption('Geometry Dash avec IA et Mode Manuel')
+pygame.display.set_caption('Geometry Dash\'ier avec IA et Mode Manuel')
 
 # Fonction pour load les images
 def load_images():
@@ -62,7 +60,6 @@ def load_progress(filename='save_state.pkl'):
             with open(filename, 'rb') as f:
                 population, generation, max_fitness = pickle.load(f)
                 print(f"Progression chargée : Génération {generation}, Fitness max {max_fitness}")
-                print(population.best_genome)
                 return population, generation, max_fitness
 
         # Si aucune sauvegarde n'existe, recommencer une nouvelle partie
@@ -434,7 +431,7 @@ def generate_obstacles(level):
                 obstacles.append(Spike(x * TILE_SIZE, y * TILE_SIZE))  # Ajoute un obstacle de type spike
     return obstacles
 
-# Charge le niveay
+# Charge le niveau
 level = load_level('level_2.csv')
 # Charge els obstacles
 obstacles = generate_obstacles(level)
@@ -455,11 +452,6 @@ else:
     # Si la population est chargée, la réutiliser
     p = population
 
-# Ajouter des reporteurs pour afficher les résultats
-p.add_reporter(neat.StdOutReporter(True))
-stats = neat.StatisticsReporter()
-p.add_reporter(stats)
-
 # Défini la génération
 GENERATION = generation
 
@@ -479,6 +471,16 @@ def eval_genomes(genomes, config):
     # Liste pour les réseaux et les jeux, réinitialisée pour chaque génération
     nets = []
     games = []
+    print()
+    # Afficher des informations au début de chaque génération
+    print(f"            ************ DEBUT DE LA GENERATION {GENERATION} ************")
+    print()
+
+    # Afficher la fitness du meilleur génome précédent (s'il y en a un)
+    if p.best_genome is None:
+        print(f"[Début de la génération {GENERATION}] Aucun meilleur génome précédent trouvé. Initialisation.")
+    else:
+        print(f"[Début de la génération {GENERATION}] Meilleur génome précédent - Fitness = {p.best_genome.fitness}")
 
     # Créer les réseaux et initialiser les jeux pour chaque génome
     for genome_id, genome in genomes:
@@ -491,20 +493,25 @@ def eval_genomes(genomes, config):
         game.grid = DetectionGrid(game.player)  # Associer une nouvelle grille
         games.append(game)
 
-    # Variable pour suivre le meilleur génome de la génération
-    best_genome = p.best_genome
+    # Si c'est la première génération, ou si aucun meilleur génome n'a été sauvegardé
+    if p.best_genome is None:
+        best_genome = None  # C'est la première génération, initialiser best_genome à None
+        print(f"[Generation {GENERATION}] Aucun meilleur génome précédent.")
+    else:
+        best_genome = p.best_genome  # Charger le meilleur génome existant
+        print(f"[Generation {GENERATION}] Meilleur génome précédent : Fitness = {p.best_genome.fitness}")
 
     # Boucle principale pour évaluer chaque génome
     for idx, (genome_id, genome) in enumerate(genomes):
         # Associer le réseau et le jeu correspondants
         net = nets[idx]
         game = games[idx]
-        
+
         # Changer l'individu
         individu += 1
         if individu > 36:
             individu = 1
-        
+
         # Placer un nouvel indicateur dans la grille
         running = True
         while running:
@@ -552,18 +559,28 @@ def eval_genomes(genomes, config):
 
             fitness_max_text = font.render(f"Fitness max global: {max_fitness_global}", True, (255, 255, 255))
             screen.blit(fitness_max_text, (10, 90))
+            
+            # Si c'est le premier individu de la génération, assignez le best_genome
+            if individu == 1 and best_genome is not None:
+                genome = best_genome  # Forcer le premier individu à être le meilleur génome
 
             pygame.display.flip()
             clock.tick(FPS)
 
+    # Assigner le meilleur génome trouvé dans la génération à p.best_genome
+    p.best_genome = best_genome
+    print(f"[Fin de la génération {GENERATION}] Meilleur génome : Fitness = {best_genome.fitness}")
+    
     # Sauvegarder la progression à la fin de la génération
     save_progress(p, GENERATION, max_fitness_global)
 
-    # Assigner le meilleur génome trouvé dans la génération à p.best_genome
-    p.best_genome = best_genome
-    print(f"Meilleur génome de la génération {GENERATION} : Fitness = {best_genome.fitness}")
+    # Debug final : afficher le meilleur génome après la génération
+    print(f"[Generation {GENERATION}] Meilleur génome après évaluation : Fitness = {best_genome.fitness}")
 
     pygame.quit()
+
+
+
 
 # Lancer l'entraînement
 if __name__ == "__main__":
@@ -576,12 +593,9 @@ if __name__ == "__main__":
                                 config_path)
 
     # Créer une population NEAT
-    p = neat.Population(config)
+    if population is None:
+        p = neat.Population(config)
     
-    # Ajouter des reporteurs pour afficher les résultats
-    p.add_reporter(neat.StdOutReporter(True))
-    stats = neat.StatisticsReporter()
-    p.add_reporter(stats)
 
     # Lancer l'entraînement des génomes
     p.run(eval_genomes, 1000)  # 50 générations d'entraînement
