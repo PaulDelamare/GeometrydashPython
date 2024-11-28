@@ -11,7 +11,6 @@ JUMP_STRENGTH = 10  # Force du saut
 player_image = None
 block_image = None
 spike_image = None
-
 # Classe pour l'obstacle
 class Obstacle(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height, image):
@@ -149,6 +148,7 @@ def generate_obstacles(level):
 
 # Fonction pour charger les images
 def load_images():
+    
     global player_image, block_image, spike_image
     player_image = pygame.image.load("assets/player.png").convert_alpha()
     player_image = pygame.transform.scale(player_image, (TILE_SIZE, TILE_SIZE))  # Redimensionner l'image du joueur
