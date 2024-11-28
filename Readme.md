@@ -20,3 +20,6 @@ git clone https://github.com/PaulDelamare/GeometrydashPython.git
 ```bash
 cd GeometrydashPython
 ```
+
+- Changer de branch
+- 
