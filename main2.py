@@ -5,25 +5,29 @@ import sys
 import random
 import csv
 import pickle
+import glob
 
 
 # Constants
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-FPS = 60
+FPS = 600
 GENERATION = 0
 TILE_SIZE = 40  # Taille de chaque case en pixels
 
+# Variable pour les images
 player_image = None
 block_image = None
 spike_image = None
 
+# Initialise Pygame
 pygame.init()
 
 # Définir la taille de la fenêtre
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))  # Utiliser config.WIDTH et config.HEIGHT
 pygame.display.set_caption('Geometry Dash avec IA et Mode Manuel')
 
+# Fonction pour load les images
 def load_images():
     
     global player_image, block_image, spike_image
@@ -38,33 +42,43 @@ def load_images():
 
 load_images()
 
-def save_progress(population, max_fitness, filename='save_state.pkl'):
-    with open(filename, 'wb') as f:
-        # Sauvegarder l'état de la population et le fitness maximal
-        pickle.dump((population, max_fitness), f)
-    print("Progression sauvegardée.")
+# Fonction pour sauvegarder la progression
+def save_progress(population, generation, max_fitness, filename='save_state.pkl'):
+    """ Sauvegarde la progression de la simulation (population, génération, fitness max, etc.). """
     
-    # Fonction pour charger l'état sauvegardé de la population
+    # Sauvegarde de la population, génération et fitness max
+    with open(filename, 'wb') as f:
+        # On sauvegarde la population, la génération, et le fitness max
+        pickle.dump((population, generation, max_fitness), f)
+    
+    print(f"Progression sauvegardée sous : {filename}")
+
+    
+# Fonction pour charger l'état sauvegardé de la population
 def load_progress(filename='save_state.pkl'):
     try:
-        with open(filename, 'rb') as f:
-            # Charger l'état de la population et le fitness maximal
-            population, max_fitness = pickle.load(f)
-            print("Progression chargée.")
-            return population, max_fitness
-    except FileNotFoundError:
-        # Si le fichier n'existe pas, retourner None pour une nouvelle initialisation
-        print("Aucune sauvegarde trouvée. Démarrage d'une nouvelle partie.")
-        return None, -float('inf')  # Fitness initial très faible
+        # Si un fichier de sauvegarde existe, on le charge
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                population, generation, max_fitness = pickle.load(f)
+                print(f"Progression chargée : Génération {generation}, Fitness max {max_fitness}")
+                print(population.best_genome)
+                return population, generation, max_fitness
 
+        # Si aucune sauvegarde n'existe, recommencer une nouvelle partie
+        print("Aucune sauvegarde trouvée. Démarrage d'une nouvelle partie.")
+        return None, 0, 0  # Pas de population et génération à 0, fitness max à 0
+    
+    except Exception as e:
+        print(f"Erreur lors du chargement : {e}")
+        return None, 0, 0
 
 # Colors
 WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-RED = (255, 0, 0)
 
 all_sprites = pygame.sprite.Group()
 
+# Charge le niveau à partir du csv
 def load_level(filename):
     level = []
     with open(filename, newline='') as csvfile:
@@ -73,6 +87,7 @@ def load_level(filename):
             level.append(row)
     return level
 
+# Class pour la grille de détection
 class DetectionGrid:
     def __init__(self, player, grid_size=6, cell_size=40):
         self.player = player
@@ -80,7 +95,7 @@ class DetectionGrid:
         self.cell_size = cell_size
         self.grid = [[0] * grid_size for _ in range(grid_size)]  # 0 = vide, 1 = bloc, 2 = pique
         self.indicator_pos = None  # Indicateur de position
-        self.gridWithout3 = [[0] * grid_size for _ in range(grid_size)] 
+        self.gridWithout3 = [[0] * grid_size for _ in range(grid_size)]  # Grille sans l'indicateur
 
     def update(self, obstacles):
         # Réinitialiser la grille à vide
@@ -88,7 +103,8 @@ class DetectionGrid:
         
         # Réinitialiser l'indicateur, s'il n'est pas défini
         if self.indicator_pos is None:
-            self.indicator_pos = (0, 0)  # Valeur par défaut pour éviter les erreurs
+            #Valeur par défaut pour éviter les erreurs
+            self.indicator_pos = (0, 0)
 
         # Calculer les coordonnées de la grille par rapport à la position du joueur
         for i in range(self.grid_size):
@@ -97,11 +113,14 @@ class DetectionGrid:
                 grid_x = self.player.rect.x + (i - self.grid_size // 2) * self.cell_size
                 grid_y = self.player.rect.y + (j - self.grid_size // 2) * self.cell_size
 
-                # Ajuster les coordonnées verticales pour mieux aligner avec l'affichage
-                grid_y -= 2 * self.cell_size  # Ajuster ici pour compenser le décalage vertical
+                # Ajuster la position de la grille visuellement (pour ne pas déplacer la grille)
+                grid_y -= 2 * self.cell_size  # Décaler visuellement pour compenser les 2 cases en plus
 
                 # Ajuster grid_x pour compenser le décalage de 4 blocs vers la droite
                 grid_x += 4 * self.cell_size  # Décalage de 4 blocs vers la droite
+
+                # Déplacer la détection de 2 cases vers le bas (ajuster la position de la détection)
+                grid_y += 2 * self.cell_size  # Détecter 2 cases plus bas que la position visuelle
 
                 # Vérifier s'il y a un obstacle à cette position
                 for obstacle in obstacles:
@@ -112,39 +131,6 @@ class DetectionGrid:
                         else:
                             self.grid[i][j] = 1  # Cellule contenant un bloc
                             self.gridWithout3[i][j] = 1
-
-        
-        # Marquer la cellule sélectionnée avec un `3`
-        # row, col = self.indicator_pos  # Obtenir la position de l'indicateur
-        # if 0 <= row < self.grid_size and 0 <= col < self.grid_size:  # Vérifier les limites
-        #     self.grid[row][col] = 3  # Marquer la cellule choisie comme spéciale
-            
-        # self.check_for_jump()
-
-    def choose_random_cell(self):
-        """ Choisit une case aléatoire dans la grille de 6x6 et renvoie un index. """
-        random_index = random.randint(0, self.grid_size * self.grid_size - 1)  # Génère un nombre aléatoire entre 0 et 35
-        return random_index
-    
-    # def check_for_jump(self):
-    #     """
-    #     Vérifie si la cellule avec l'indicateur (3) a un obstacle (1) et effectue un saut si nécessaire.
-    #     """
-    #     # Parcourir les grilles pour comparer les positions
-    #     for i in range(self.grid_size):
-    #         for j in range(self.grid_size):
-    #             # Vérifier si la grille avec l'indicateur contient un `3` à la position (i, j)
-    #             if self.grid[i][j] == 3:
-    #                 # Vérifier si la grille sans l'indicateur contient un `1` (obstacle) à la même position
-    #                 if self.gridWithout3[i][j] == 2:
-    #                     self.player.jump()  # Effectuer le saut si un obstacle est détecté
-
-    def set_indicator_pos(self, cell_index):
-        """Définit la case à colorier (en jaune)."""
-        row = cell_index // self.grid_size
-        col = cell_index % self.grid_size
-        self.indicator_pos = (row, col)  # Enregistrer la position de la case choisie
-        self.indicator_pos
 
     def draw(self, screen):
         # Dessiner la grille
@@ -184,18 +170,11 @@ class DetectionGrid:
                               self.player.rect.bottom - (self.grid_size * self.cell_size) + (i - self.grid_size // 2) * self.cell_size),
                              (self.player.rect.x + self.grid_size * self.cell_size, 
                               self.player.rect.bottom - (self.grid_size * self.cell_size) + (i - self.grid_size // 2) * self.cell_size), 2)
-            
+    
+    # Retourne l'étât de la grille avec les informations sur les blocs et les piques
     def get_grid_state(self):
         # Retourner l'état de la grille sous forme de vecteur pour l'IA
         return [cell for row in self.grid for cell in row]  # Transforme la grille en un vecteur 1D
-    
-    def choose_random_cell(self):
-        """
-        Choisit une case aléatoire parmi les 36 cases de la grille et retourne son index.
-        L'index est compris entre 0 et 35.
-        """
-        return random.randint(1, 36)
-
 
 # Player Class
 class Player(pygame.sprite.Sprite):
@@ -228,15 +207,16 @@ class Player(pygame.sprite.Sprite):
         self.on_ground = False  # Réinitialise la vérification du sol
 
         # Appliquer la gravité
-        self.velocity += 1  # La gravité fait descendre le joueur
-        self.rect.y += self.velocity  # Mettre à jour la position verticale
+        self.velocity += 1
+        # Mettre à jour la position verticale
+        self.rect.y += self.velocity 
 
         # Vérifier la collision avec le sol ou les obstacles
         for obstacle in obstacles:
             if self.rect.colliderect(obstacle.rect):  # Si le joueur touche un obstacle
                 if isinstance(obstacle, Spike):  # Vérifier si l'obstacle est un pique (spike)
                     # Si le joueur touche un pic, il meurt ou est arrêté
-                    self.is_running = False  # Le joueur est touché par le pic
+                    self.is_running = False
                     return False
                 
                 if self.velocity > 0:  # Si le joueur tombe
@@ -249,26 +229,12 @@ class Player(pygame.sprite.Sprite):
         if self.rect.bottom > SCREEN_HEIGHT:
             self.rect.bottom = SCREEN_HEIGHT
             self.velocity = 0  # Arrêter la chute
-                
-    def check_block_collision(self, obstacles):
-        """ Vérifie si le joueur est en collision avec un bloc. """
-        for obstacle in obstacles:
-            if isinstance(obstacle, Obstacle):  # Si c'est un bloc
-                if self.rect.colliderect(obstacle.rect):  # Si le joueur entre en collision avec un bloc
-                    # Vérifier la direction de la collision pour décider si le joueur est sur le bloc ou non
-                    if self.rect.bottom <= obstacle.rect.top + 10:  # Le joueur est sur le bloc
-                        self.rect.bottom = obstacle.rect.top  # Positionner le joueur juste sur le bloc
-                        self.gravity = 0  # Réinitialiser la gravité pour éviter que le joueur tombe
-                        self.is_jumping = False  # Indiquer que le joueur n'est plus en train de sauter
-                    else:
-                        # Si la collision est autre, on gère la logique de mouvement ou d'arrêt (par exemple, arrêter le mouvement horizontal)
-                        pass
 
-
+    # Dessine le bloc joueur
     def draw(self, screen):
-        
         screen.blit(self.image, self.rect)
 
+# Obstacle Class
 class Obstacle(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height, image):
         super().__init__()
@@ -276,15 +242,15 @@ class Obstacle(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
         
+    # Rapproche le block vers la gauche (le joueur ne bouge aps ce sont les obstacles)
     def move(self):
         self.rect.x -= 8
-        
-    def off_screen(self):
-        return self.rect.x + self.rect.width < 0
     
+    # Dessine le block
     def draw(self, screen):
         screen.blit(self.image, self.rect)
 
+# Spike Class
 class Spike(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
@@ -302,15 +268,16 @@ class Spike(pygame.sprite.Sprite):
                 # La condition pour remplir un triangle pointant vers le haut
                 if y <= (-x + TILE_SIZE):  # Crée un triangle équilatéral inversé
                     self.mask.set_at((x, y), 1)  # Définir les pixels du masque comme "1"
+    
+    # Rapproche le spike vers la gauche
     def move(self):
-        self.rect.x -= 8 # Déplace le spike vers la gauche, comme un obstacle normal
+        self.rect.x -= 8
     
-    def off_screen(self):
-        return self.rect.x + self.rect.width < 0
-    
+    # Verifie si le joueur touche le spike
     def check_collision(self, player_rect):
         return self.rect.colliderect(player_rect)
     
+    # Dessine le spike
     def draw(self, screen):
         screen.blit(self.image, self.rect)
 
@@ -347,19 +314,15 @@ class Game:
         self.population.add_reporter(neat.StdOutReporter(True))
         self.population.add_reporter(neat.Checkpointer(5))
 
-    def spawn_obstacle(self):
-        if self.spawn_timer <= 0:
-            height = random.randint(50, 150)
-            self.obstacles.append(Obstacle(SCREEN_WIDTH, SCREEN_HEIGHT - height, 50, height))
-            self.spawn_timer = random.randint(30, 60)
-        else:
-            self.spawn_timer -= 1
-
+    # Lancer l'entraînement des génomes
     def update(self):
+        # Mettre à jour la grille
         self.grid.update(self.obstacles)
     
+        # Mettre à jour le joueur
         self.player.move(self.obstacles)
         
+        # Mettre à jour la position de la caméra
         if self.player.rect.bottom > SCREEN_HEIGHT - 50:
             self.is_running = False  # Arrêter le jeu si le joueur est trop bas
 
@@ -373,6 +336,7 @@ class Game:
         # Mettre à jour le score
         self.score += 1
 
+    # Vérifie les colisions
     def check_collisions(self):
         """Vérifie les collisions avec les obstacles (spikes et blocs)."""
         for obstacle in self.obstacles:
@@ -394,7 +358,8 @@ class Game:
                             # Le joueur est sur le côté du bloc
                             self.is_running = False  # Le joueur meurt, on arrête le jeu
                             return
-            
+    
+    #  Dessine le jeu
     def draw(self, screen):
         # Dessiner le fond
         screen.blit(self.background, (0, 0))
@@ -406,14 +371,15 @@ class Game:
         # Dessiner le score
         self.draw_score(screen)
         
-        # Positionner la grille par rapport au joueur
-        grid_x = self.player.rect.x  # Le joueur est déjà à gauche, donc on garde son X pour la grille
-        grid_y = self.player.rect.bottom - self.grid.cell_size * len(self.grid.grid)  # Positionner la grille en bas du joueur
+        # Positionner la grille pour que le joueur soit tout à gauche
+        grid_x = self.player.rect.left  # Aligner la colonne gauche sur le joueur
+        grid_y = (self.player.rect.centery - (self.grid.grid_size // 2) * self.grid.cell_size 
+                - self.grid.cell_size / 2)  # Centrer verticalement et déplacer une demi-case plus haut
 
-        # Dessiner la grille avec la nouvelle position
+        # Dessiner la grille avec l'orientation
         for i, row in enumerate(self.grid.grid):
             for j, cell in enumerate(row):
-                if cell == 3:  # Indicateur spécial
+                if cell == 3:  # Indicateur du joueur
                     border_color = (255, 255, 0)  # Jaune
                 elif cell == 1:  # Bloc
                     border_color = (255, 0, 0)  # Rouge
@@ -423,26 +389,30 @@ class Game:
                     border_color = (0, 255, 255)  # Cyan
 
                 pygame.draw.rect(screen, border_color, 
-                                (grid_x + i * self.grid.cell_size, 
-                                grid_y + j * self.grid.cell_size, 
+                                (grid_x + i * self.grid.cell_size,  # `i` correspond à x
+                                grid_y + j * self.grid.cell_size,  # `j` correspond à y
                                 self.grid.cell_size, self.grid.cell_size), 2)
 
+    # Dessine le score
     def draw_score(self, screen):
         font = pygame.font.SysFont("Arial", 30)
-        score_text = font.render(f"Score: {self.score}", True, BLACK)
+        score_text = font.render(f"Score: {self.score}", True, (0, 0, 0))
         screen.blit(score_text, (10, 10))
 
+    # Récupère l'état de la grille
     def get_state(self):
         # Récupérer l'état de la grille comme vecteur d'entrées pour NEAT
         return self.grid.get_grid_state()
 
+    # Récupère le score
     def get_reward(self):
         return self.score
 
+    # Verifie si le jeu est encore en cours
     def is_alive(self):
         return self.is_running
 
-
+# Fonction pour charger le niveau à partir d'un fichier CSV
 def load_level(filename):
     """Charger le niveau à partir d'un fichier CSV."""
     level = []
@@ -452,6 +422,7 @@ def load_level(filename):
             level.append(row)
     return level
 
+# Fonction pour générer les obstacles à partir du niveau
 def generate_obstacles(level):
     """Générer les obstacles à partir du niveau."""
     obstacles = []
@@ -463,14 +434,14 @@ def generate_obstacles(level):
                 obstacles.append(Spike(x * TILE_SIZE, y * TILE_SIZE))  # Ajoute un obstacle de type spike
     return obstacles
 
-level = load_level('level_2.csv')  # Remplacer par le chemin correct de votre niveau
+# Charge le niveay
+level = load_level('level_2.csv')
+# Charge els obstacles
 obstacles = generate_obstacles(level)
 
-# Déclarer le fitness max globalement avant la fonction eval_genomes
-max_fitness_global = -float('inf')  # Initialiser à une valeur très faible
-
 # Charger la progression (si elle existe)
-population, max_fitness_global = load_progress()
+population, generation, max_fitness = load_progress()
+max_fitness_global = max_fitness
 
 # Créer une population NEAT
 if population is None:
@@ -489,87 +460,94 @@ p.add_reporter(neat.StdOutReporter(True))
 stats = neat.StatisticsReporter()
 p.add_reporter(stats)
 
+# Défini la génération
+GENERATION = generation
+
 # Fonction d'évaluation des génomes
 def eval_genomes(genomes, config):
     global GENERATION, max_fitness_global
     GENERATION += 1  # Incrémenter la génération
+
+    # Compteur d'individus
+    individu = 0
 
     # Initialiser Pygame et l'écran
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
 
-    # Créer des réseaux et des jeux
+    # Liste pour les réseaux et les jeux, réinitialisée pour chaque génération
     nets = []
     games = []
 
-    # Assigner des IDs séquentiels et créer les réseaux et les jeux pour chaque génome
-    for idx, (genome_id, genome) in enumerate(genomes):
-        # Assigner un ID unique séquentiel
-        genome_id = idx + 1  # Assigner un ID allant de 1 à n
-
+    # Créer les réseaux et initialiser les jeux pour chaque génome
+    for genome_id, genome in genomes:
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         nets.append(net)
         genome.fitness = 0  # Réinitialiser la fitness
 
-        # Initialiser un nouveau jeu pour chaque génome
-        game = Game()
-        game.grid = DetectionGrid(game.player)
+        # Créer un nouveau jeu pour chaque génome
+        game = Game()  # Assurez-vous que Game() crée un nouvel état pour chaque joueur
+        game.grid = DetectionGrid(game.player)  # Associer une nouvelle grille
         games.append(game)
 
-    # Vérification que le nombre de jeux correspond au nombre de génomes
-    if len(games) != len(genomes):
-        print(f"Erreur : le nombre de jeux ({len(games)}) ne correspond pas au nombre de génomes ({len(genomes)}).")
-        pygame.quit()
-        sys.exit(1)
+    # Variable pour suivre le meilleur génome de la génération
+    best_genome = p.best_genome
 
-    # Boucle principale pour chaque génération
+    # Boucle principale pour évaluer chaque génome
     for idx, (genome_id, genome) in enumerate(genomes):
-        if genome_id > len(games):  # Vérifier que l'ID est valide
-            print(f"Erreur : génome_id {genome_id} dépasse le nombre de jeux ({len(games)}).")
-            continue  # Passer au génome suivant si l'indice est hors de portée
-
-        # Assigner à nouveau un ID séquentiel lors de l'évaluation (optionnel si vous réinitialisez les génomes)
-        genome_id = idx + 1  # Toujours garantir que l'ID est de 1 à n
-
-        game = games[genome_id - 1]  # Assurez-vous que l'indice est valide
-        net = nets[genome_id - 1]
-        game.grid.set_indicator_pos(game.grid.choose_random_cell())
-
+        # Associer le réseau et le jeu correspondants
+        net = nets[idx]
+        game = games[idx]
+        
+        # Changer l'individu
+        individu += 1
+        if individu > 36:
+            individu = 1
+        
+        # Placer un nouvel indicateur dans la grille
         running = True
         while running:
+            # Gestion des événements
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    sys.exit(0)  # Sortie propre de l'application
+                    sys.exit(0)
 
-            grid_state = game.grid.get_grid_state()  # Récupérer l'état de la grille
-            output = net.activate(grid_state)  # Activer le réseau avec l'état de la grille
+            # Obtenir l'état de la grille et passer dans le réseau
+            grid_state = game.grid.get_grid_state()
+            output = net.activate(grid_state)
 
-            action = output.index(max(output))  # Décision de l'IA (sauter ou non)
+            # Prendre une décision basée sur la sortie du réseau
+            action = output.index(max(output))  # 0 ou 1
             if action == 1:
                 game.player.jump()
 
-            # Mettre à jour la fitness
+            # Mettre à jour le jeu et calculer la fitness
             if game.is_alive():
                 game.update()
-                genome.fitness += game.get_reward()  # Mise à jour de la fitness du génome
+                genome.fitness += game.get_reward()  # Augmenter la fitness
             else:
                 running = False
 
-            # Garder la trace du meilleur fitness
+            # Mise à jour du meilleur fitness global
             if genome.fitness > max_fitness_global:
                 max_fitness_global = genome.fitness
 
-            # Dessiner l'état actuel du jeu
+            # Mettre à jour le meilleur génome de la génération
+            if best_genome is None or genome.fitness > best_genome.fitness:
+                best_genome = genome
+
+            # Dessiner le jeu
             screen.fill(WHITE)
             game.draw(screen)
 
+            # Afficher les informations de debug
             font = pygame.font.SysFont("Arial", 30)
             generation_text = font.render(f"Generation: {GENERATION}", True, (255, 255, 255))
             screen.blit(generation_text, (10, 10))
 
-            fitness_current_text = font.render(f"Fitness actuel (ID {genome_id}): {genome.fitness}", True, (255, 255, 255))
+            fitness_current_text = font.render(f"Fitness actuel (ID {individu}): {genome.fitness}", True, (255, 255, 255))
             screen.blit(fitness_current_text, (10, 50))
 
             fitness_max_text = font.render(f"Fitness max global: {max_fitness_global}", True, (255, 255, 255))
@@ -579,11 +557,17 @@ def eval_genomes(genomes, config):
             clock.tick(FPS)
 
     # Sauvegarder la progression à la fin de la génération
-    save_progress(p, max_fitness_global)  # Sauvegarder l'état après chaque génération
+    save_progress(p, GENERATION, max_fitness_global)
+
+    # Assigner le meilleur génome trouvé dans la génération à p.best_genome
+    p.best_genome = best_genome
+    print(f"Meilleur génome de la génération {GENERATION} : Fitness = {best_genome.fitness}")
 
     pygame.quit()
 
+# Lancer l'entraînement
 if __name__ == "__main__":
+    
     # Charger le fichier de configuration NEAT
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, "neat-config.ini")
