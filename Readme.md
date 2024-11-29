@@ -28,10 +28,10 @@ git checkout final
 
 - Installer les dépendances : 
 ```bash
-pip install neat-python pygame
+pip install neat-python pygame pickle
 ```
 
 - Executer le projet :
 ```bash
-python main2.py
+python play.py
 ```
