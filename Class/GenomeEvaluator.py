@@ -81,7 +81,7 @@ class GenomeEvaluator:
 
             # Changer l'individu
             individu += 1
-            if individu > 36:
+            if individu > 50:
                 individu = 1
 
             # Placer un nouvel indicateur dans la grille

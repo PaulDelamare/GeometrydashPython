@@ -5,7 +5,7 @@ import pygame
 from Class.Spike import  Spike
 
 class DetectionGrid:
-    def __init__(self, player, grid_size=6, cell_size=40):
+    def __init__(self, player, grid_size=7, cell_size=40):
         self.player = player
         self.grid_size = grid_size
         self.cell_size = cell_size
