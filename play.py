@@ -41,4 +41,4 @@ if __name__ == "__main__":
     
     # Lancer l'entraînement des génomes
     evaluator = GenomeEvaluator(config, p, max_fitness_global, generation)
-    p.run(evaluator.eval_genomes, 50)
+    p.run(evaluator.eval_genomes, 1000000)
