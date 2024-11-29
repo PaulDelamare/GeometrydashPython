@@ -27,11 +27,12 @@ class DetectionGrid:
         Args:
             obstacles (list): Une liste d'objets d'obstacles à vérifier pour les collisions avec les cellules de la grille.
         """
+        # Réinitialiser la grille à vide
         self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
         
         # Réinitialiser l'indicateur, s'il n'est pas défini
         if self.indicator_pos is None:
-            #Valeur par défaut pour éviter les erreurs
+            # Valeur par défaut pour éviter les erreurs
             self.indicator_pos = (0, 0)
 
         # Calculer les coordonnées de la grille par rapport à la position du joueur
@@ -47,8 +48,9 @@ class DetectionGrid:
                 # Ajuster grid_x pour compenser le décalage de 4 blocs vers la droite
                 grid_x += 4 * self.cell_size  # Décalage de 4 blocs vers la droite
 
-                # Déplacer la détection de 2 cases vers le bas (ajuster la position de la détection)
-                grid_y += 2 * self.cell_size  # Détecter 2 cases plus bas que la position visuelle
+                # Ne pas déplacer la détection de 2 cases vers le bas
+                # Ajuster la détection pour qu'elle soit correctement alignée avec la position du joueur
+                grid_y += self.cell_size  # Ajuster de 1 cellule plutôt que 2
 
                 # Vérifier s'il y a un obstacle à cette position
                 for obstacle in obstacles:

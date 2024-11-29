@@ -128,8 +128,8 @@ class Game:
         
         # Positionner la grille pour que le joueur soit tout à gauche
         grid_x = self.player.rect.left  # Aligner la colonne gauche sur le joueur
-        grid_y = (self.player.rect.centery - (self.grid.grid_size // 2) * self.grid.cell_size 
-                - self.grid.cell_size / 2)  # Centrer verticalement et déplacer une demi-case plus haut
+        grid_y = (self.player.rect.centery - (self.grid.grid_size // 2) * self.grid.cell_size
+            - self.grid.cell_size - self.grid.cell_size / 2)  # Centrer verticalement et déplacer d'une case et demi plus haut
 
         # Dessiner la grille avec l'orientation
         for i, row in enumerate(self.grid.grid):
