@@ -5,7 +5,7 @@ SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 
 # Vitesse du jeu
-FPS = 60
+FPS = 600
 
 # Taille d'une tuile (tile)
 TILE_SIZE = 40
