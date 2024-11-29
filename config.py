@@ -7,11 +7,6 @@ SCREEN_HEIGHT = 600
 # Vitesse du jeu
 FPS = 60
 
-def setPopulation(population):
-    global POPULATION
-    POPULATION = population
-    print("POPULATION SET", POPULATION)
-
 # Taille d'une tuile (tile)
 TILE_SIZE = 40
 
