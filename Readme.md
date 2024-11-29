@@ -36,7 +36,7 @@ macOS ou Linux :
 source venv/bin/activate
 
 Windows :
-python -m venv venv
+venv/bin/activate
 ```
 
 - Installer les dépendances : 
