@@ -21,14 +21,27 @@ git clone https://github.com/PaulDelamare/GeometrydashPython.git
 cd GeometrydashPython
 ```
 
-- Changer de branch
+- Créer un environement virtuel : 
 ```bash
-git checkout final
+macOS ou Linux :
+python3 -m venv venv
+
+Windows :
+python -m venv venv
+```
+
+- Activer l'environement
+```bash
+macOS ou Linux :
+source venv/bin/activate
+
+Windows :
+python -m venv venv
 ```
 
 - Installer les dépendances : 
 ```bash
-pip install neat-python pygame pickle
+pip install -r requirements.txt
 ```
 
 - Executer le projet :
